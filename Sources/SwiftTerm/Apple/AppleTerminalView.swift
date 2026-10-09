@@ -909,10 +909,13 @@ extension TerminalView {
         if flags.contains (.dim) {
             fgColor = fgColor.dimmedColor (towards: bgColor)
         }
+        let shapeColor = fgColor
+        fgColor = fgColor.withContrast (atLeast: minimumContrastRatio, against: bgColor)
         var nsattr: [NSAttributedString.Key:Any] = [
             .font: tf,
             .foregroundColor: fgColor,
-            .backgroundColor: bgColor
+            .backgroundColor: bgColor,
+            SwiftTermShapeColorKey: shapeColor
         ]
         if flags.contains (.underline) {
             let underlineColor = attribute.underlineColor.map {
@@ -1155,6 +1158,7 @@ extension TerminalView {
                 if isSelected {
                     batchAttributes[.selectionBackgroundColor] = selectedTextBackgroundColor
                     batchAttributes[.foregroundColor] = selectedTextForegroundColor
+                    batchAttributes[SwiftTermShapeColorKey] = selectedTextForegroundColor
                     if batchAttributes[.underlineColor] != nil {
                         batchAttributes[.underlineColor] = selectedTextForegroundColor
                     }
@@ -1191,7 +1195,7 @@ extension TerminalView {
             if !blinkHidden && PowerlineRenderer.shouldRender(codePoint: renderCodePoint,
                                               customGlyphsEnabled: customBlockGlyphs) {
                 flushPending()
-                let fgColor = (currentAttributes[.foregroundColor] as? TTColor) ?? effectiveNativeForegroundColor
+                let fgColor = (currentAttributes[SwiftTermShapeColorKey] as? TTColor) ?? (currentAttributes[.foregroundColor] as? TTColor) ?? effectiveNativeForegroundColor
                 powerlineGlyphs.append(PowerlineRenderItem(column: visualCol,
                                                            columnWidth: width,
                                                            codePoint: renderCodePoint,
@@ -1206,7 +1210,7 @@ extension TerminalView {
                renderCodePoint >= UInt32(BoxDrawingRenderer.lowerBoundary),
                renderCodePoint <= UInt32(BoxDrawingRenderer.upperBoundary) {
                 flushPending()
-                let fgColor = (currentAttributes[.foregroundColor] as? TTColor) ?? effectiveNativeForegroundColor
+                let fgColor = (currentAttributes[SwiftTermShapeColorKey] as? TTColor) ?? (currentAttributes[.foregroundColor] as? TTColor) ?? effectiveNativeForegroundColor
                 boxDrawings.append(BoxDrawingRenderItem(column: visualCol,
                                                         columnWidth: width,
                                                         codePoint: renderCodePoint,
@@ -1221,7 +1225,7 @@ extension TerminalView {
                        && renderCodePoint <= UInt32(BlockElementMapping.upperBoundary)),
                       let rects = BlockElementMapping.rects(for: renderCodePoint) {
                 flushPending()
-                let fgColor = (currentAttributes[.foregroundColor] as? TTColor) ?? effectiveNativeForegroundColor
+                let fgColor = (currentAttributes[SwiftTermShapeColorKey] as? TTColor) ?? (currentAttributes[.foregroundColor] as? TTColor) ?? effectiveNativeForegroundColor
                 blockElements.append(BlockElementRenderItem(column: visualCol,
                                                             columnWidth: width,
                                                             codePoint: renderCodePoint,

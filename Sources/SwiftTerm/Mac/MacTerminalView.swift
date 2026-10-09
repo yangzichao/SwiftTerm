@@ -992,6 +992,17 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
         }
     }
 
+    /// The least contrast, as a WCAG ratio from 1 to 21, that text keeps against its background. Text whose colors
+    /// fall below it, such as colors a program picked for a background of the other brightness, is darkened or
+    /// lightened just enough to reach it. Box drawing and block elements keep their colors. The default, 1, keeps
+    /// every color as it is.
+    public var minimumContrastRatio: CGFloat = 1 {
+        didSet {
+            guard minimumContrastRatio != oldValue else { return }
+            colorsChanged ()
+        }
+    }
+
     /// When true, block element (U+2580-U+259F) and box drawing (U+2500-U+257F) characters use custom rendering.
     public var customBlockGlyphs: Bool = true {
         didSet {
