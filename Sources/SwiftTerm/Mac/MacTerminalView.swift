@@ -1311,7 +1311,14 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
             interpretKeyEvents([event])
             return
         }
-        
+
+        // Arrows, Home and End with Shift, Option or Control are sent as xterm does. Otherwise AppKit turns
+        // them into selection commands that send nothing, and Option-Up would send ESC and a private-use character.
+        if !hasMarkedText(), let sequence = modifiedNavigationKeySequence(for: event) {
+            send(sequence)
+            return
+        }
+
         // Handle Option-letter to send the ESC sequence plus the letter as expected by terminals
         if eventFlags.contains ([.option, .command]) {
             if event.charactersIgnoringModifiers == "o" {
@@ -1404,6 +1411,36 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
         }
         
         interpretKeyEvents([event])
+    }
+
+    /// `CSI 1 ; modifiers final` for an arrow, Home or End pressed with Shift, Option or Control, where modifiers is
+    /// 1 plus 1 for Shift, 2 for Option and 4 for Control. Nil for keys without them, or with Command, which keep
+    /// their own handling, and for Option-Left and Option-Right alone while Option is Meta, which send Esc b and Esc f.
+    func modifiedNavigationKeySequence(for event: NSEvent) -> [UInt8]? {
+        let flags = event.modifierFlags
+        guard !flags.contains(.command),
+              let scalar = event.charactersIgnoringModifiers?.unicodeScalars.first else {
+            return nil
+        }
+        let final: UInt8
+        switch Int(scalar.value) {
+        case NSUpArrowFunctionKey: final = UInt8(ascii: "A")
+        case NSDownArrowFunctionKey: final = UInt8(ascii: "B")
+        case NSRightArrowFunctionKey: final = UInt8(ascii: "C")
+        case NSLeftArrowFunctionKey: final = UInt8(ascii: "D")
+        case NSHomeFunctionKey: final = UInt8(ascii: "H")
+        case NSEndFunctionKey: final = UInt8(ascii: "F")
+        default: return nil
+        }
+        var modifiers = 0
+        if flags.contains(.shift) { modifiers |= 1 }
+        if flags.contains(.option) { modifiers |= 2 }
+        if flags.contains(.control) { modifiers |= 4 }
+        if modifiers == 0 { return nil }
+        if modifiers == 2, optionAsMetaKey, final == UInt8(ascii: "C") || final == UInt8(ascii: "D") {
+            return nil
+        }
+        return EscapeSequences.modifiedCursorKey(final: final, modifiers: modifiers)
     }
 
     public override func keyUp(with event: NSEvent) {

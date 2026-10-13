@@ -126,6 +126,12 @@ public struct EscapeSequences {
     public static let controlLeft: [UInt8] = [ 0x1b, 0x5b, 0x31, 0x3b, 0x35, 0x44 ]
     /// Control-right arrow
     public static let controlRight: [UInt8] = [ 0x1b, 0x5b, 0x31, 0x3b, 0x35, 0x43 ]
+
+    /// A cursor key, Home or End with modifiers, as xterm sends it: `ESC [ 1 ; 1+modifiers final`, where modifiers
+    /// add 1 for Shift, 2 for Alt and 4 for Control. Shift-Left is `ESC [ 1 ; 2 D`.
+    public static func modifiedCursorKey(final: UInt8, modifiers: Int) -> [UInt8] {
+        [0x1b, 0x5b, 0x31, 0x3b] + Array(String(1 + modifiers).utf8) + [final]
+    }
     
     /// Beginning of pasted text when bracketed-paste is enabled (mode 2004)
     /// The sequence is `ESC [ 200 ~`
