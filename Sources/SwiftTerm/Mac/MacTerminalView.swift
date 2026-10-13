@@ -1578,6 +1578,7 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
         if terminal.keyboardEnhancementFlags.isEmpty,
            !eventFlags.contains(.command),
            (!eventFlags.contains(.option) || optionAsMetaKey),
+           !isOptionWordMotion(event),
            let functionKey = kittyFunctionalKey(from: event) {
             let modifiers = kittyModifiers(from: event, includeOption: optionAsMetaKey)
             let isUnmodifiedPageKey = (functionKey == .pageUp || functionKey == .pageDown)
@@ -1638,7 +1639,14 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
             interpretKeyEvents([event])
             return
         }
-        
+
+        // Arrows, Home and End with Shift, Option or Control are sent as xterm does. Otherwise AppKit turns
+        // them into selection commands that send nothing, and Option-Up would send ESC and a private-use character.
+        if !hasMarkedText(), let sequence = modifiedNavigationKeySequence(for: event) {
+            send(sequence)
+            return
+        }
+
         // Handle Option-letter to send the ESC sequence plus the letter as expected by terminals
         if eventFlags.contains ([.option, .command]) {
             if event.charactersIgnoringModifiers == "o" {
@@ -1731,6 +1739,47 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
         }
         
         interpretKeyEvents([event])
+    }
+
+    /// `CSI 1 ; modifiers final` for an arrow, Home or End pressed with Shift, Option or Control, where modifiers is
+    /// 1 plus 1 for Shift, 2 for Option and 4 for Control. Nil for keys without them, or with Command, which keep
+    /// their own handling, and for Option-Left and Option-Right alone while Option is Meta, which send Esc b and Esc f.
+    func modifiedNavigationKeySequence(for event: NSEvent) -> [UInt8]? {
+        let flags = event.modifierFlags
+        guard !flags.contains(.command),
+              let scalar = event.charactersIgnoringModifiers?.unicodeScalars.first else {
+            return nil
+        }
+        let final: UInt8
+        switch Int(scalar.value) {
+        case NSUpArrowFunctionKey: final = UInt8(ascii: "A")
+        case NSDownArrowFunctionKey: final = UInt8(ascii: "B")
+        case NSRightArrowFunctionKey: final = UInt8(ascii: "C")
+        case NSLeftArrowFunctionKey: final = UInt8(ascii: "D")
+        case NSHomeFunctionKey: final = UInt8(ascii: "H")
+        case NSEndFunctionKey: final = UInt8(ascii: "F")
+        default: return nil
+        }
+        var modifiers = 0
+        if flags.contains(.shift) { modifiers |= 1 }
+        if flags.contains(.option) { modifiers |= 2 }
+        if flags.contains(.control) { modifiers |= 4 }
+        if modifiers == 0 { return nil }
+        if isOptionWordMotion(event) {
+            return nil
+        }
+        return EscapeSequences.modifiedCursorKey(final: final, modifiers: modifiers)
+    }
+
+    /// Option-Left or Option-Right alone while Option is Meta, which send Esc b and Esc f, Emacs's word motion, as
+    /// Terminal and iTerm2 do.
+    func isOptionWordMotion(_ event: NSEvent) -> Bool {
+        guard optionAsMetaKey,
+              event.modifierFlags.intersection([.shift, .control, .option, .command]) == .option,
+              let scalar = event.charactersIgnoringModifiers?.unicodeScalars.first else {
+            return false
+        }
+        return Int(scalar.value) == NSLeftArrowFunctionKey || Int(scalar.value) == NSRightArrowFunctionKey
     }
 
     public override func keyUp(with event: NSEvent) {
